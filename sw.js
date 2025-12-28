@@ -1,27 +1,46 @@
-const CACHE = "gympass-cache-v1";
-const ASSETS = [
-  "./",
-  "./index.html",
-  "./styles.css",
-  "./app.js",
-  "./manifest.webmanifest",
-  "./icons/icon-192.png",
-  "./icons/icon-512.png"
+const CACHE_NAME = "gymlogg-v1";
+
+const ASSETS_TO_CACHE = [
+  "/gymlogg/",
+  "/gymlogg/index.html",
+  "/gymlogg/styles.css",
+  "/gymlogg/app.js",
+  "/gymlogg/manifest.webmanifest",
+  "/gymlogg/icons/icon-192.png",
+  "/gymlogg/icons/icon-512.png"
 ];
 
-self.addEventListener("install", (event) => {
+// Install: cache alla filer
+self.addEventListener("install", event => {
   event.waitUntil(
-    caches.open(CACHE).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting())
+    caches.open(CACHE_NAME).then(cache => {
+      return cache.addAll(ASSETS_TO_CACHE);
+    })
   );
+  self.skipWaiting();
 });
 
-self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+// Activate: rensa gamla cache-versioner
+self.addEventListener("activate", event => {
+  event.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(
+        keys.map(key => {
+          if (key !== CACHE_NAME) {
+            return caches.delete(key);
+          }
+        })
+      )
+    )
+  );
+  self.clients.claim();
 });
 
-self.addEventListener("fetch", (event) => {
+// Fetch: använd cache först, annars nätet
+self.addEventListener("fetch", event => {
   event.respondWith(
-    caches.match(event.request).then(cached => cached || fetch(event.request))
+    caches.match(event.request).then(response => {
+      return response || fetch(event.request);
+    })
   );
 });
-
