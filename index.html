@@ -1,105 +1,161 @@
 <!doctype html>
 <html lang="sv">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#111827" />
   <title>Ett Pass Till</title>
 
-  <!-- PWA -->
-  <link rel="manifest" href="/gymlogg/manifest.webmanifest">
-  <meta name="theme-color" content="#0b1220">
-
-  <!-- Icons -->
-  <link rel="icon" href="/gymlogg/icons/icon-192.png">
-  <link rel="apple-touch-icon" href="/gymlogg/icons/icon-192.png">
-
-  <!-- Styles -->
-  <link rel="stylesheet" href="/gymlogg/styles.css">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icon-192.png" sizes="192x192">
+  <link rel="apple-touch-icon" href="./icon-192.png">
+  <link rel="stylesheet" href="./styles.css" />
 </head>
 
 <body>
-
-  <!-- ========================= -->
-  <!-- APP UI -->
-  <!-- ========================= -->
-
-  <header>
-    <h1>Ett Pass Till</h1>
-    <p>Planera • Träna • Följ upp</p>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">🏋️</div>
+      <div>
+        <div class="title">Ett Pass Till</div>
+        <div class="subtitle">Planera • Träna • Logga</div>
+      </div>
+    </div>
   </header>
 
-  <nav>
-    <button onclick="showTab('stations')">1. Stationer</button>
-    <button onclick="showTab('plans')">2. Planer</button>
-    <button onclick="showTab('workout')">3. Träning</button>
-    <button onclick="showTab('history')">4. Historik</button>
+  <nav class="tabs">
+    <button class="tab active" data-tab="stations">1. Stationer</button>
+    <button class="tab" data-tab="plans">2. Planer</button>
+    <button class="tab" data-tab="workout">3. Träning</button>
+    <button class="tab" data-tab="history">4. Historik</button>
   </nav>
 
-  <main>
-
-    <!-- Stationer -->
-    <section id="stations">
+  <main class="container">
+    <!-- STATIONER -->
+    <section id="tab-stations" class="panel active">
       <h2>Stationer</h2>
-      <input id="stationName" placeholder="Ny station">
-      <button onclick="addStation()">Lägg till</button>
-      <ul id="stationList"></ul>
+
+      <div class="card">
+        <h3>Skapa / uppdatera station</h3>
+        <form id="stationForm" class="grid">
+          <input type="hidden" id="stationId" />
+
+          <label>
+            Namn
+            <input id="stationName" placeholder="Ex: Bänkpress" required />
+          </label>
+
+          <label>
+            Standardvikt (kg)
+            <input id="stationDefaultWeight" type="number" inputmode="decimal" step="0.5" min="0" placeholder="Ex: 60" />
+          </label>
+
+          <label>
+            Standard set
+            <input id="stationDefaultSets" type="number" inputmode="numeric" step="1" min="1" placeholder="Ex: 3" />
+          </label>
+
+          <label>
+            Standard reps
+            <input id="stationDefaultReps" type="number" inputmode="numeric" step="1" min="1" placeholder="Ex: 8" />
+          </label>
+
+          <div class="actions">
+            <button type="submit" class="primary" id="stationSaveBtn">Spara station</button>
+            <button type="button" id="stationCancelBtn" class="ghost">Avbryt</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h3>Dina stationer</h3>
+        <div id="stationsList" class="list"></div>
+      </div>
     </section>
 
-    <!-- Planer -->
-    <section id="plans" style="display:none">
+    <!-- PLANER -->
+    <section id="tab-plans" class="panel">
       <h2>Planer</h2>
-      <input id="planName" placeholder="Pass A">
-      <button onclick="addPlan()">Skapa plan</button>
-      <select id="planSelect" onchange="renderPlan()"></select>
-      <div id="planEditor"></div>
+
+      <div class="card">
+        <h3>Skapa ny plan</h3>
+        <form id="planCreateForm" class="row">
+          <input id="planName" placeholder="Ex: Pass A" required />
+          <button class="primary" type="submit">Skapa</button>
+        </form>
+        <p class="hint">Tips: Döp dem “Pass A”, “Pass B”, “Rygg”, osv.</p>
+      </div>
+
+      <div class="card">
+        <h3>Redigera plan</h3>
+
+        <div class="row">
+          <label class="grow">
+            Välj plan
+            <select id="planSelect"></select>
+          </label>
+          <button id="planRenameBtn" class="ghost" type="button">Byt namn</button>
+          <button id="planDeleteBtn" class="danger" type="button">Ta bort</button>
+        </div>
+
+        <hr class="sep"/>
+
+        <div class="row">
+          <label class="grow">
+            Lägg till station
+            <select id="planAddStationSelect"></select>
+          </label>
+          <button id="planAddStationBtn" class="primary" type="button">Lägg till</button>
+        </div>
+
+        <div id="planItemsEditor" class="tableWrap"></div>
+      </div>
     </section>
 
-    <!-- Träning -->
-    <section id="workout" style="display:none">
+    <!-- TRÄNING -->
+    <section id="tab-workout" class="panel">
       <h2>Träning</h2>
-      <select id="workoutSelect"></select>
-      <button onclick="startWorkout()">Starta pass</button>
-      <div id="workoutList"></div>
-      <button onclick="finishWorkout()">Avsluta & spara</button>
+
+      <div class="card">
+        <div class="row">
+          <label class="grow">
+            Välj plan att köra
+            <select id="workoutPlanSelect"></select>
+          </label>
+          <button id="workoutLoadBtn" class="primary" type="button">Starta</button>
+        </div>
+
+        <div id="workoutChecklist" class="checklist"></div>
+
+        <div class="actions">
+          <button id="workoutFinishBtn" class="primary" type="button">Avsluta & spara i historik</button>
+          <button id="workoutResetBtn" class="ghost" type="button">Nollställ checklista</button>
+        </div>
+
+        <p class="hint">När du avslutar sparas en rad per station med vikt/set/reps i historiken.</p>
+      </div>
     </section>
 
-    <!-- Historik -->
-    <section id="history" style="display:none">
+    <!-- HISTORIK -->
+    <section id="tab-history" class="panel">
       <h2>Historik</h2>
-      <button onclick="exportCSV()">Exportera CSV</button>
-      <table border="1">
-        <thead>
-          <tr>
-            <th>Datum</th>
-            <th>Pass</th>
-            <th>Station</th>
-            <th>Vikt</th>
-            <th>Set</th>
-            <th>Reps</th>
-          </tr>
-        </thead>
-        <tbody id="historyTable"></tbody>
-      </table>
-    </section>
 
+      <div class="card">
+        <div class="row">
+          <button id="exportCsvBtn" class="primary" type="button">Exportera CSV</button>
+          <button id="clearHistoryBtn" class="danger" type="button">Rensa historik</button>
+        </div>
+
+        <div id="historyTable" class="tableWrap"></div>
+      </div>
+    </section>
   </main>
 
-  <!-- ========================= -->
-  <!-- Scripts -->
-  <!-- ========================= -->
+  <footer class="footer">
+    <span class="pill">Offline/PWA-ready</span>
+    <span class="muted">Allt sparas lokalt i din enhet.</span>
+  </footer>
 
-  <script src="/gymlogg/app.js"></script>
-
-  <script>
-    if ("serviceWorker" in navigator) {
-      window.addEventListener("load", () => {
-        navigator.serviceWorker.register("/gymlogg/sw.js", {
-          scope: "/gymlogg/"
-        });
-      });
-    }
-  </script>
-
+  <script src="./app.js" defer></script>
 </body>
 </html>
