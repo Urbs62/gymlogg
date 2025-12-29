@@ -37,10 +37,21 @@ body{
 .subtitle{ color:var(--muted); font-size:13px; margin-top:2px; }
 
 .tabs{
-  max-width:980px; margin:0 auto;
+  max-width:980px;
+  margin:0 auto;
   padding: 0 16px 12px;
-  display:flex; gap:8px; flex-wrap:wrap;
+  display:flex;
+  flex-wrap:wrap;          /* tillåt radbrytning */
+  gap:8px;
+  justify-content:center;  /* centrera på mobil */
 }
+
+.tabs button{
+  flex:1 1 140px;          /* 2+2 på mobil */
+  max-width:220px;         /* rimlig bredd på desktop */
+  white-space:nowrap;      /* bryt inte texten */
+}
+
 .tab{
   border:1px solid rgba(255,255,255,.10);
   background: rgba(255,255,255,.04);
@@ -199,38 +210,4 @@ td.muted{ color: var(--muted); }
 }
 .muted{ color: var(--muted); font-size:13px; }
 .hint{ color: var(--muted); font-size:13px; margin: 10px 0 0; }
-
-/* Splash overlay */
-.splash{
-  position: fixed;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  background: #0b1220; /* samma som din app-bakgrund om du har */
-  z-index: 9999;
-  opacity: 1;
-  transition: opacity 500ms ease;
-}
-
-.splash-logo{
-  width: min(80vw, 360px);
-  height: auto;
-  max-height: 45vh;
-  object-fit: contain;
-}
-
-/* När splash ska bort */
-.splash.hide{
-  opacity: 0;
-  pointer-events: none;
-}
-
-.splash.gone{
-  display: none;
-}
-
-/* Respektera reduced motion */
-@media (prefers-reduced-motion: reduce){
-  .splash{ transition: none; }
-}
 
