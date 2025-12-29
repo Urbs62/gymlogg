@@ -1,21 +1,14 @@
 {
   "name": "Ett Pass Till",
   "short_name": "Ett Pass Till",
-  "start_url": "/gymlogg/",
-  "scope": "/gymlogg/",
+  "description": "Planera pass, checka av stationer och exportera historik.",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#0b1220",
-  "theme_color": "#0b1220",
+  "theme_color": "#111827",
   "icons": [
-    {
-      "src": "/gymlogg/icons/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "/gymlogg/icons/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    }
+    { "src": "./icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png" }
   ]
 }
