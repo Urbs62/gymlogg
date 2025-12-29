@@ -553,5 +553,5 @@ window.addEventListener("load", () => {
   setTimeout(() => {
     const splash = document.getElementById("app-splash");
     if (splash) splash.style.display = "none";
-  }, 1500); // millisekunder: 1500 = 1,5 sek
+  }, 2500); // millisekunder: 1500 = 1,5 sek
 });
