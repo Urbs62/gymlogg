@@ -1,10 +1,11 @@
-// ====== Storage keys ======
-const K_STATIONS = "gymapp_stations_v1";
-const K_PLANS    = "gymapp_plans_v1";
-const K_HISTORY  = "gymapp_history_v1";
+/* Ett Pass Till — superenkel gymapp (offline/localStorage) */
 
-// ====== Helpers ======
-const $ = (sel) => document.querySelector(sel);
+const LS = {
+  stations: "ept_stations_v1",
+  plans: "ept_plans_v1",
+  history: "ept_history_v1",
+};
+
 const uid = () => Math.random().toString(16).slice(2) + Date.now().toString(16);
 
 function load(key, fallback){
@@ -19,497 +20,531 @@ function save(key, value){
   localStorage.setItem(key, JSON.stringify(value));
 }
 
-function todayStamp(){
-  const d = new Date();
-  const pad = (n)=> String(n).padStart(2,"0");
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+function escapeCsv(v){
+  const s = String(v ?? "");
+  if (/[",\n;]/.test(s)) return `"${s.replaceAll('"','""')}"`;
+  return s;
 }
 
-function escapeCsv(s){
-  const str = String(s ?? "");
-  if (/[",\n;]/.test(str)) return `"${str.replaceAll('"','""')}"`;
-  return str;
-}
-
-function downloadText(filename, text){
-  const blob = new Blob([text], {type:"text/plain;charset=utf-8"});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
-
-// ====== State ======
-let stations = load(K_STATIONS, []); // [{id,name}]
-let plans    = load(K_PLANS,    []); // [{id,name,items:[{id,stationId,weight,sets,reps}]}]
-let history  = load(K_HISTORY,  []); // [{id,ts,planName,rows:[{station,weight,sets,reps}]}]
-
-let activeWorkout = null; // {planId, planName, checklist:[{...item, done:boolean, stationName}]}
-
-// ====== Tabs ======
-const tabButtons = document.querySelectorAll(".tab");
-const panels = {
-  stations: $("#tab-stations"),
-  plans: $("#tab-plans"),
-  workout: $("#tab-workout"),
-  history: $("#tab-history"),
+const state = {
+  stations: load(LS.stations, []),
+  plans: load(LS.plans, []),  // {id,name,items:[{stationId, weight, sets, reps}]}
+  history: load(LS.history, []), // {ts, date, planName, stationName, weight, sets, reps}
+  workout: { planId: null, done: {} }
 };
 
-function setTab(tab){
-  tabButtons.forEach(b=>{
-    const isActive = b.dataset.tab === tab;
-    b.classList.toggle("active", isActive);
-    b.setAttribute("aria-selected", isActive ? "true" : "false");
-  });
-  Object.entries(panels).forEach(([k,el])=>{
-    el.classList.toggle("hidden", k !== tab);
-  });
-}
+// ---------- Tabs ----------
+const tabs = document.querySelectorAll(".tab");
+const panels = {
+  stations: document.getElementById("tab-stations"),
+  plans: document.getElementById("tab-plans"),
+  workout: document.getElementById("tab-workout"),
+  history: document.getElementById("tab-history"),
+};
 
-tabButtons.forEach(btn=>{
-  btn.addEventListener("click", ()=> setTab(btn.dataset.tab));
+tabs.forEach(btn => {
+  btn.addEventListener("click", () => {
+    tabs.forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    const t = btn.dataset.tab;
+    Object.values(panels).forEach(p => p.classList.remove("active"));
+    panels[t].classList.add("active");
+
+    // refresh views when switching
+    if (t === "stations") renderStations();
+    if (t === "plans") { renderPlanSelectors(); renderPlanEditor(); }
+    if (t === "workout") { renderWorkoutSelectors(); renderWorkoutChecklist(); }
+    if (t === "history") renderHistory();
+  });
 });
 
-// ====== Stations UI ======
-const stationName = $("#stationName");
-const addStationBtn = $("#addStationBtn");
-const stationsList = $("#stationsList");
-const clearStationsBtn = $("#clearStationsBtn");
+// ---------- Stationer ----------
+const stationForm = document.getElementById("stationForm");
+const stationId = document.getElementById("stationId");
+const stationName = document.getElementById("stationName");
+const stationDefaultWeight = document.getElementById("stationDefaultWeight");
+const stationDefaultSets = document.getElementById("stationDefaultSets");
+const stationDefaultReps = document.getElementById("stationDefaultReps");
+const stationCancelBtn = document.getElementById("stationCancelBtn");
+const stationsList = document.getElementById("stationsList");
+
+stationCancelBtn.addEventListener("click", () => clearStationForm());
+
+stationForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const name = stationName.value.trim();
+  if (!name) return;
+
+  const w = stationDefaultWeight.value === "" ? null : Number(stationDefaultWeight.value);
+  const s = stationDefaultSets.value === "" ? null : Number(stationDefaultSets.value);
+  const r = stationDefaultReps.value === "" ? null : Number(stationDefaultReps.value);
+
+  const id = stationId.value || uid();
+
+  const existingIdx = state.stations.findIndex(x => x.id === id);
+  const obj = { id, name, defaultWeight: w, defaultSets: s, defaultReps: r };
+
+  if (existingIdx >= 0) state.stations[existingIdx] = obj;
+  else state.stations.push(obj);
+
+  save(LS.stations, state.stations);
+  clearStationForm();
+  renderStations();
+  renderPlanSelectors();
+  renderWorkoutSelectors();
+});
+
+function clearStationForm(){
+  stationId.value = "";
+  stationName.value = "";
+  stationDefaultWeight.value = "";
+  stationDefaultSets.value = "";
+  stationDefaultReps.value = "";
+}
 
 function renderStations(){
-  stationsList.innerHTML = "";
-  if(stations.length === 0){
-    stationsList.innerHTML = `<div class="muted">Inga stationer ännu. Lägg till din första ovan.</div>`;
+  if (!state.stations.length){
+    stationsList.innerHTML = `<div class="muted">Inga stationer ännu. Skapa en ovan.</div>`;
     return;
   }
-  stations.forEach(s=>{
-    const row = document.createElement("div");
-    row.className = "item";
-    row.innerHTML = `
-      <div class="meta">
-        <div class="name">${s.name}</div>
-        <div class="sub">ID: ${s.id.slice(0,8)}</div>
-      </div>
-      <div class="actions">
-        <button class="ghost" data-edit="${s.id}">Ändra</button>
-        <button class="danger ghost" data-del="${s.id}">Ta bort</button>
-      </div>
-    `;
-    stationsList.appendChild(row);
-  });
-  // actions
-  stationsList.querySelectorAll("button[data-del]").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      const id = btn.dataset.del;
-      stations = stations.filter(s=>s.id!==id);
-      // även rensa bort från plan-items
-      plans = plans.map(p=>({
-        ...p,
-        items: p.items.filter(it=>it.stationId!==id)
-      }));
-      save(K_STATIONS, stations);
-      save(K_PLANS, plans);
-      refreshAll();
+
+  const html = state.stations
+    .slice()
+    .sort((a,b) => a.name.localeCompare(b.name, "sv"))
+    .map(s => {
+      const meta = [
+        s.defaultWeight != null ? `${s.defaultWeight} kg` : null,
+        s.defaultSets != null ? `${s.defaultSets} set` : null,
+        s.defaultReps != null ? `${s.defaultReps} reps` : null
+      ].filter(Boolean).join(" • ");
+
+      return `
+        <div class="item">
+          <div>
+            <div class="name">${s.name}</div>
+            <div class="meta">${meta || "—"}</div>
+          </div>
+          <div class="btns">
+            <button class="ghost" data-edit="${s.id}">Edit</button>
+            <button class="danger" data-del="${s.id}">Ta bort</button>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+  stationsList.innerHTML = html;
+
+  stationsList.querySelectorAll("[data-edit]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const s = state.stations.find(x => x.id === btn.dataset.edit);
+      if (!s) return;
+      stationId.value = s.id;
+      stationName.value = s.name;
+      stationDefaultWeight.value = s.defaultWeight ?? "";
+      stationDefaultSets.value = s.defaultSets ?? "";
+      stationDefaultReps.value = s.defaultReps ?? "";
+      window.scrollTo({ top: 0, behavior: "smooth" });
     });
   });
-  stationsList.querySelectorAll("button[data-edit]").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      const id = btn.dataset.edit;
-      const s = stations.find(x=>x.id===id);
-      const name = prompt("Nytt stationsnamn:", s?.name ?? "");
-      if(!name) return;
-      s.name = name.trim();
-      save(K_STATIONS, stations);
-      refreshAll();
+
+  stationsList.querySelectorAll("[data-del]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const id = btn.dataset.del;
+      // Ta bort station från plan-items också
+      state.stations = state.stations.filter(x => x.id !== id);
+      state.plans.forEach(p => p.items = p.items.filter(it => it.stationId !== id));
+
+      save(LS.stations, state.stations);
+      save(LS.plans, state.plans);
+      renderStations();
+      renderPlanSelectors();
+      renderPlanEditor();
+      renderWorkoutSelectors();
+      renderWorkoutChecklist();
     });
   });
 }
 
-addStationBtn.addEventListener("click", ()=>{
-  const name = stationName.value.trim();
-  if(!name) return;
-  stations.push({id: uid(), name});
-  stationName.value = "";
-  save(K_STATIONS, stations);
-  refreshAll();
+// ---------- Planer ----------
+const planCreateForm = document.getElementById("planCreateForm");
+const planNameInput = document.getElementById("planName");
+const planSelect = document.getElementById("planSelect");
+const planRenameBtn = document.getElementById("planRenameBtn");
+const planDeleteBtn = document.getElementById("planDeleteBtn");
+const planAddStationSelect = document.getElementById("planAddStationSelect");
+const planAddStationBtn = document.getElementById("planAddStationBtn");
+const planItemsEditor = document.getElementById("planItemsEditor");
+
+planCreateForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const name = planNameInput.value.trim();
+  if (!name) return;
+
+  state.plans.push({ id: uid(), name, items: [] });
+  save(LS.plans, state.plans);
+  planNameInput.value = "";
+  renderPlanSelectors(true);
+  renderPlanEditor();
+  renderWorkoutSelectors();
 });
 
-clearStationsBtn.addEventListener("click", ()=>{
-  if(!confirm("Rensa alla stationer? (Detta tar även bort dem från planer)")) return;
-  stations = [];
-  plans = plans.map(p=>({ ...p, items: [] }));
-  save(K_STATIONS, stations);
-  save(K_PLANS, plans);
-  refreshAll();
+planSelect.addEventListener("change", () => {
+  renderPlanEditor();
 });
 
-// ====== Plans UI ======
-const planName = $("#planName");
-const createPlanBtn = $("#createPlanBtn");
-const planSelect = $("#planSelect");
-const renamePlanBtn = $("#renamePlanBtn");
-const deletePlanBtn = $("#deletePlanBtn");
+planRenameBtn.addEventListener("click", () => {
+  const p = getSelectedPlan();
+  if (!p) return;
+  const newName = prompt("Nytt namn på plan:", p.name);
+  if (!newName) return;
+  p.name = newName.trim();
+  save(LS.plans, state.plans);
+  renderPlanSelectors(true);
+  renderWorkoutSelectors();
+  renderHistory(); // planName visas där
+});
 
-const planStationSelect = $("#planStationSelect");
-const planWeight = $("#planWeight");
-const planSets = $("#planSets");
-const planReps = $("#planReps");
-const addToPlanBtn = $("#addToPlanBtn");
-const clearPlanItemsBtn = $("#clearPlanItemsBtn");
-const planItems = $("#planItems");
+planDeleteBtn.addEventListener("click", () => {
+  const p = getSelectedPlan();
+  if (!p) return;
+  if (!confirm(`Ta bort "${p.name}"?`)) return;
+  state.plans = state.plans.filter(x => x.id !== p.id);
+  save(LS.plans, state.plans);
+  renderPlanSelectors(true);
+  renderPlanEditor();
+  renderWorkoutSelectors();
+});
+
+planAddStationBtn.addEventListener("click", () => {
+  const p = getSelectedPlan();
+  if (!p) return;
+  const stationId = planAddStationSelect.value;
+  if (!stationId) return;
+
+  // defaultvärden från station
+  const st = state.stations.find(s => s.id === stationId);
+  const item = {
+    stationId,
+    weight: st?.defaultWeight ?? null,
+    sets: st?.defaultSets ?? null,
+    reps: st?.defaultReps ?? null
+  };
+  p.items.push(item);
+  save(LS.plans, state.plans);
+  renderPlanEditor();
+});
 
 function getSelectedPlan(){
   const id = planSelect.value;
-  return plans.find(p=>p.id===id) || null;
+  return state.plans.find(p => p.id === id) || null;
 }
 
-function renderPlanSelects(){
-  // plans dropdown (Planer)
+function renderPlanSelectors(keepSelection=false){
+  // planSelect
+  const prev = planSelect.value;
   planSelect.innerHTML = "";
-  if(plans.length === 0){
-    planSelect.innerHTML = `<option value="">(Inga planer)</option>`;
-  }else{
-    plans.forEach(p=>{
-      const opt = document.createElement("option");
-      opt.value = p.id;
-      opt.textContent = p.name;
-      planSelect.appendChild(opt);
-    });
+  const plansSorted = state.plans.slice().sort((a,b)=>a.name.localeCompare(b.name,"sv"));
+  plansSorted.forEach(p => {
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = p.name;
+    planSelect.appendChild(opt);
+  });
+  if (plansSorted.length){
+    planSelect.value = keepSelection && prev ? prev : plansSorted[0].id;
   }
 
-  // stations dropdown for plan items
-  planStationSelect.innerHTML = "";
-  if(stations.length === 0){
-    planStationSelect.innerHTML = `<option value="">(Skapa stationer först)</option>`;
-  }else{
-    stations.forEach(s=>{
-      const opt = document.createElement("option");
-      opt.value = s.id;
-      opt.textContent = s.name;
-      planStationSelect.appendChild(opt);
-    });
+  // station select (for adding)
+  planAddStationSelect.innerHTML = "";
+  const stSorted = state.stations.slice().sort((a,b)=>a.name.localeCompare(b.name,"sv"));
+  const empty = document.createElement("option");
+  empty.value = "";
+  empty.textContent = stSorted.length ? "Välj station…" : "Skapa stationer först…";
+  planAddStationSelect.appendChild(empty);
+
+  stSorted.forEach(s => {
+    const opt = document.createElement("option");
+    opt.value = s.id;
+    opt.textContent = s.name;
+    planAddStationSelect.appendChild(opt);
+  });
+}
+
+function renderPlanEditor(){
+  const p = getSelectedPlan();
+  if (!p){
+    planItemsEditor.innerHTML = `<div class="muted">Skapa en plan först.</div>`;
+    return;
   }
 
-  // workout dropdown
-  const workoutPlanSelect = $("#workoutPlanSelect");
+  if (!p.items.length){
+    planItemsEditor.innerHTML = `<div class="muted">Ingen station i planen ännu. Lägg till en ovan.</div>`;
+    return;
+  }
+
+  const rows = p.items.map((it, idx) => {
+    const st = state.stations.find(s => s.id === it.stationId);
+    const name = st?.name ?? "(saknad station)";
+    return `
+      <tr>
+        <td>${name}</td>
+        <td><input data-pidx="${idx}" data-field="weight" type="number" step="0.5" min="0" value="${it.weight ?? ""}" placeholder="kg"></td>
+        <td><input data-pidx="${idx}" data-field="sets" type="number" step="1" min="1" value="${it.sets ?? ""}" placeholder="set"></td>
+        <td><input data-pidx="${idx}" data-field="reps" type="number" step="1" min="1" value="${it.reps ?? ""}" placeholder="reps"></td>
+        <td><button class="danger" type="button" data-remove="${idx}">Ta bort</button></td>
+      </tr>
+    `;
+  }).join("");
+
+  planItemsEditor.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Station</th>
+          <th>Vikt (kg)</th>
+          <th>Set</th>
+          <th>Reps</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p class="hint">Ändringar sparas direkt när du skriver.</p>
+  `;
+
+  // live-save inputs
+  planItemsEditor.querySelectorAll("input[data-pidx]").forEach(inp => {
+    inp.addEventListener("input", () => {
+      const idx = Number(inp.dataset.pidx);
+      const field = inp.dataset.field;
+      const val = inp.value === "" ? null : Number(inp.value);
+      p.items[idx][field] = val;
+      save(LS.plans, state.plans);
+    });
+  });
+
+  planItemsEditor.querySelectorAll("[data-remove]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const idx = Number(btn.dataset.remove);
+      p.items.splice(idx, 1);
+      save(LS.plans, state.plans);
+      renderPlanEditor();
+    });
+  });
+}
+
+// ---------- Träning ----------
+const workoutPlanSelect = document.getElementById("workoutPlanSelect");
+const workoutLoadBtn = document.getElementById("workoutLoadBtn");
+const workoutChecklist = document.getElementById("workoutChecklist");
+const workoutFinishBtn = document.getElementById("workoutFinishBtn");
+const workoutResetBtn = document.getElementById("workoutResetBtn");
+
+workoutLoadBtn.addEventListener("click", () => {
+  state.workout.planId = workoutPlanSelect.value || null;
+  state.workout.done = {};
+  renderWorkoutChecklist();
+});
+
+workoutResetBtn.addEventListener("click", () => {
+  state.workout.done = {};
+  renderWorkoutChecklist();
+});
+
+workoutFinishBtn.addEventListener("click", () => {
+  const p = getWorkoutPlan();
+  if (!p) return;
+
+  const now = new Date();
+  const date = now.toLocaleString("sv-SE"); // fin tidsstämpel
+
+  // Spara en rad per station (med planens värden)
+  p.items.forEach(it => {
+    const st = state.stations.find(s => s.id === it.stationId);
+    state.history.unshift({
+      ts: now.getTime(),
+      date,
+      planName: p.name,
+      stationName: st?.name ?? "(saknad station)",
+      weight: it.weight ?? "",
+      sets: it.sets ?? "",
+      reps: it.reps ?? ""
+    });
+  });
+
+  save(LS.history, state.history);
+
+  // Efter avslut: nollställ checklista men behåll plan-val
+  state.workout.done = {};
+  renderWorkoutChecklist();
+
+  // hoppa till Historik
+  document.querySelector('.tab[data-tab="history"]').click();
+});
+
+function getWorkoutPlan(){
+  const id = state.workout.planId || workoutPlanSelect.value;
+  return state.plans.find(p => p.id === id) || null;
+}
+
+function renderWorkoutSelectors(){
+  const prev = workoutPlanSelect.value;
   workoutPlanSelect.innerHTML = "";
-  if(plans.length === 0){
-    workoutPlanSelect.innerHTML = `<option value="">(Skapa planer först)</option>`;
-  }else{
-    plans.forEach(p=>{
-      const opt = document.createElement("option");
-      opt.value = p.id;
-      opt.textContent = p.name;
-      workoutPlanSelect.appendChild(opt);
-    });
+  const plansSorted = state.plans.slice().sort((a,b)=>a.name.localeCompare(b.name,"sv"));
+  plansSorted.forEach(p => {
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = p.name;
+    workoutPlanSelect.appendChild(opt);
+  });
+  if (plansSorted.length){
+    workoutPlanSelect.value = prev || plansSorted[0].id;
   }
 }
 
-function renderPlanItems(){
-  planItems.innerHTML = "";
-  const p = getSelectedPlan();
-  if(!p){
-    planItems.innerHTML = `<div class="muted">Skapa och välj en plan.</div>`;
+function renderWorkoutChecklist(){
+  const p = getWorkoutPlan();
+  if (!p){
+    workoutChecklist.innerHTML = `<div class="muted">Skapa en plan under “Planer” först.</div>`;
     return;
   }
-  if(p.items.length === 0){
-    planItems.innerHTML = `<div class="muted">Planen är tom. Lägg till stationer ovan.</div>`;
+  if (!p.items.length){
+    workoutChecklist.innerHTML = `<div class="muted">Planen är tom. Lägg till stationer under “Planer”.</div>`;
     return;
   }
 
-  p.items.forEach(it=>{
-    const sName = stations.find(s=>s.id===it.stationId)?.name ?? "(saknas)";
-    const row = document.createElement("div");
-    row.className = "item";
-    row.innerHTML = `
-      <div class="meta">
-        <div class="name">${sName}</div>
-        <div class="sub">Vikt: ${it.weight ?? ""} • Set: ${it.sets ?? ""} • Reps: ${it.reps ?? ""}</div>
-      </div>
-      <div class="actions">
-        <button class="ghost" data-edit="${it.id}">Ändra</button>
-        <button class="danger ghost" data-del="${it.id}">Ta bort</button>
+  const html = p.items.map((it, idx) => {
+    const st = state.stations.find(s => s.id === it.stationId);
+    const name = st?.name ?? "(saknad station)";
+    const done = !!state.workout.done[idx];
+    const badge = done ? `<span class="badge done">Klar</span>` : `<span class="badge">Pågår</span>`;
+    const meta = [
+      it.weight != null && it.weight !== "" ? `${it.weight} kg` : null,
+      it.sets != null && it.sets !== "" ? `${it.sets} set` : null,
+      it.reps != null && it.reps !== "" ? `${it.reps} reps` : null
+    ].filter(Boolean).join(" • ");
+
+    return `
+      <div class="rowline">
+        <input type="checkbox" data-widx="${idx}" ${done ? "checked" : ""} />
+        <div class="grow">
+          <div><strong>${name}</strong> ${badge}</div>
+          <div class="muted">${meta || "—"}</div>
+        </div>
       </div>
     `;
-    planItems.appendChild(row);
-  });
+  }).join("");
 
-  planItems.querySelectorAll("button[data-del]").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      const id = btn.dataset.del;
-      const p = getSelectedPlan();
-      p.items = p.items.filter(x=>x.id!==id);
-      save(K_PLANS, plans);
-      refreshAll();
-    });
-  });
+  workoutChecklist.innerHTML = html;
 
-  planItems.querySelectorAll("button[data-edit]").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      const id = btn.dataset.edit;
-      const p = getSelectedPlan();
-      const it = p.items.find(x=>x.id===id);
-      if(!it) return;
-
-      const sName = stations.find(s=>s.id===it.stationId)?.name ?? "(saknas)";
-      const w = prompt(`Vikt för ${sName}:`, it.weight ?? "");
-      if(w === null) return;
-      const sets = prompt(`Antal set för ${sName}:`, it.sets ?? "");
-      if(sets === null) return;
-      const reps = prompt(`Antal reps för ${sName}:`, it.reps ?? "");
-      if(reps === null) return;
-
-      it.weight = Number(w);
-      it.sets = Number(sets);
-      it.reps = Number(reps);
-
-      save(K_PLANS, plans);
-      refreshAll();
+  workoutChecklist.querySelectorAll('input[type="checkbox"][data-widx]').forEach(cb => {
+    cb.addEventListener("change", () => {
+      const idx = Number(cb.dataset.widx);
+      state.workout.done[idx] = cb.checked;
+      // re-render bara för badge (enkel lösning)
+      renderWorkoutChecklist();
     });
   });
 }
 
-createPlanBtn.addEventListener("click", ()=>{
-  const name = planName.value.trim();
-  if(!name) return;
-  const p = {id: uid(), name, items: []};
-  plans.push(p);
-  planName.value = "";
-  save(K_PLANS, plans);
-  refreshAll();
-  planSelect.value = p.id;
-  renderPlanItems();
-});
+// ---------- Historik ----------
+const exportCsvBtn = document.getElementById("exportCsvBtn");
+const clearHistoryBtn = document.getElementById("clearHistoryBtn");
+const historyTable = document.getElementById("historyTable");
 
-planSelect.addEventListener("change", ()=>{
-  renderPlanItems();
-});
-
-renamePlanBtn.addEventListener("click", ()=>{
-  const p = getSelectedPlan();
-  if(!p) return;
-  const name = prompt("Nytt plan-namn:", p.name);
-  if(!name) return;
-  p.name = name.trim();
-  save(K_PLANS, plans);
-  refreshAll();
-  planSelect.value = p.id;
-  renderPlanItems();
-});
-
-deletePlanBtn.addEventListener("click", ()=>{
-  const p = getSelectedPlan();
-  if(!p) return;
-  if(!confirm(`Ta bort "${p.name}"?`)) return;
-  plans = plans.filter(x=>x.id!==p.id);
-  save(K_PLANS, plans);
-  refreshAll();
-});
-
-addToPlanBtn.addEventListener("click", ()=>{
-  const p = getSelectedPlan();
-  if(!p) return;
-  const stationId = planStationSelect.value;
-  if(!stationId) return;
-
-  const weight = planWeight.value === "" ? null : Number(planWeight.value);
-  const sets   = planSets.value === "" ? null : Number(planSets.value);
-  const reps   = planReps.value === "" ? null : Number(planReps.value);
-
-  p.items.push({id: uid(), stationId, weight, sets, reps});
-  save(K_PLANS, plans);
-
-  planWeight.value = "";
-  planSets.value = "";
-  planReps.value = "";
-  refreshAll();
-  renderPlanItems();
-});
-
-clearPlanItemsBtn.addEventListener("click", ()=>{
-  const p = getSelectedPlan();
-  if(!p) return;
-  if(!confirm(`Rensa alla stationer i "${p.name}"?`)) return;
-  p.items = [];
-  save(K_PLANS, plans);
-  refreshAll();
-  renderPlanItems();
-});
-
-// ====== Workout UI ======
-const workoutPlanSelect = $("#workoutPlanSelect");
-const startWorkoutBtn = $("#startWorkoutBtn");
-const finishWorkoutBtn = $("#finishWorkoutBtn");
-const workoutList = $("#workoutList");
-
-function renderWorkout(){
-  workoutList.innerHTML = "";
-  if(!activeWorkout){
-    workoutList.innerHTML = `<div class="muted">Ingen aktiv träning. Välj pass och tryck “Starta”.</div>`;
-    finishWorkoutBtn.disabled = true;
+exportCsvBtn.addEventListener("click", () => {
+  if (!state.history.length){
+    alert("Ingen historik att exportera.");
     return;
   }
-  finishWorkoutBtn.disabled = false;
 
-  activeWorkout.checklist.forEach((it, idx)=>{
-    const row = document.createElement("div");
-    row.className = "item";
-    row.innerHTML = `
-      <div class="meta">
-        <div class="name">${idx+1}. ${it.stationName}</div>
-        <div class="sub">Vikt: ${it.weight ?? ""} • Set: ${it.sets ?? ""} • Reps: ${it.reps ?? ""}</div>
-      </div>
-      <div class="actions">
-        <button class="${it.done ? "success" : "primary"}" data-toggle="${it.id}">
-          ${it.done ? "Klar ✓" : "Markera klar"}
-        </button>
-      </div>
-    `;
-    workoutList.appendChild(row);
-  });
+  const header = ["datum", "plan", "station", "vikt", "set", "reps"];
+  const rows = state.history.map(r => ([
+    r.date, r.planName, r.stationName, r.weight, r.sets, r.reps
+  ]));
 
-  workoutList.querySelectorAll("button[data-toggle]").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      const id = btn.dataset.toggle;
-      const it = activeWorkout.checklist.find(x=>x.id===id);
-      it.done = !it.done;
-      renderWorkout();
-    });
-  });
-}
+  // semikolon funkar bra i svensk Excel
+  const csv = [header, ...rows]
+    .map(cols => cols.map(escapeCsv).join(";"))
+    .join("\n");
 
-startWorkoutBtn.addEventListener("click", ()=>{
-  const planId = workoutPlanSelect.value;
-  const p = plans.find(x=>x.id===planId);
-  if(!p) return;
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
 
-  const checklist = p.items.map(it=>{
-    const stationName = stations.find(s=>s.id===it.stationId)?.name ?? "(saknas)";
-    return {
-      id: uid(),
-      stationName,
-      weight: it.weight ?? null,
-      sets: it.sets ?? null,
-      reps: it.reps ?? null,
-      done: false
-    };
-  });
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "ett-pass-till-historik.csv";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 
-  activeWorkout = { planId: p.id, planName: p.name, checklist };
-  renderWorkout();
+  URL.revokeObjectURL(url);
 });
 
-finishWorkoutBtn.addEventListener("click", ()=>{
-  if(!activeWorkout) return;
-
-  const ts = todayStamp();
-  const rows = activeWorkout.checklist.map(it=>({
-    station: it.stationName,
-    weight: it.weight ?? "",
-    sets: it.sets ?? "",
-    reps: it.reps ?? ""
-  }));
-
-  history.unshift({
-    id: uid(),
-    ts,
-    planName: activeWorkout.planName,
-    rows
-  });
-
-  save(K_HISTORY, history);
-
-  activeWorkout = null;
-  renderWorkout();
+clearHistoryBtn.addEventListener("click", () => {
+  if (!confirm("Rensa all historik?")) return;
+  state.history = [];
+  save(LS.history, state.history);
   renderHistory();
-  setTab("history");
 });
-
-// ====== History UI ======
-const exportCsvBtn = $("#exportCsvBtn");
-const clearHistoryBtn = $("#clearHistoryBtn");
-const historyTbody = $("#historyTbody");
-const historyCount = $("#historyCount");
 
 function renderHistory(){
-  historyTbody.innerHTML = "";
-  let rowCount = 0;
+  if (!state.history.length){
+    historyTable.innerHTML = `<div class="muted">Ingen historik ännu. Kör ett pass under “Träning”.</div>`;
+    return;
+  }
 
-  history.forEach(h=>{
-    h.rows.forEach(r=>{
-      rowCount++;
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${h.ts}</td>
-        <td>${h.planName}</td>
-        <td>${r.station}</td>
-        <td>${r.weight}</td>
-        <td>${r.sets}</td>
-        <td>${r.reps}</td>
-      `;
-      historyTbody.appendChild(tr);
-    });
-  });
+  const rows = state.history.map(r => `
+    <tr>
+      <td>${r.date}</td>
+      <td>${r.planName}</td>
+      <td>${r.stationName}</td>
+      <td>${r.weight}</td>
+      <td>${r.sets}</td>
+      <td>${r.reps}</td>
+    </tr>
+  `).join("");
 
-  historyCount.textContent = `${history.length} pass • ${rowCount} rader`;
-  if(history.length === 0){
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td colspan="6" class="muted">Ingen historik ännu.</td>`;
-    historyTbody.appendChild(tr);
-    historyCount.textContent = `0 pass • 0 rader`;
+  historyTable.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Datum</th>
+          <th>Plan</th>
+          <th>Station</th>
+          <th>Vikt</th>
+          <th>Set</th>
+          <th>Reps</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+// ---------- Init ----------
+function firstRunDefaults(){
+  // Om användaren är helt ny: skapa “Pass A” som mall (valfritt, men trevligt)
+  if (!state.plans.length){
+    state.plans.push({ id: uid(), name: "Pass A", items: [] });
+    save(LS.plans, state.plans);
   }
 }
 
-exportCsvBtn.addEventListener("click", ()=>{
-  // CSV med semikolon (svenskt Excel gillar ofta ;)
-  const header = ["Datum","Pass","Station","Vikt","Set","Reps"];
-  const lines = [header.join(";")];
+firstRunDefaults();
+renderStations();
+renderPlanSelectors(true);
+renderPlanEditor();
+renderWorkoutSelectors();
+renderWorkoutChecklist();
+renderHistory();
 
-  history.forEach(h=>{
-    h.rows.forEach(r=>{
-      lines.push([
-        escapeCsv(h.ts),
-        escapeCsv(h.planName),
-        escapeCsv(r.station),
-        escapeCsv(r.weight),
-        escapeCsv(r.sets),
-        escapeCsv(r.reps),
-      ].join(";"));
-    });
-  });
-
-  const csv = lines.join("\n");
-  downloadText(`gym-historik-${new Date().toISOString().slice(0,10)}.csv`, csv);
-});
-
-clearHistoryBtn.addEventListener("click", ()=>{
-  if(!confirm("Rensa ALL historik?")) return;
-  history = [];
-  save(K_HISTORY, history);
-  renderHistory();
-});
-
-// ====== Refresh ======
-function refreshAll(){
-  renderStations();
-  renderPlanSelects();
-  renderPlanItems();
-  renderWorkout();
-  renderHistory();
-}
-refreshAll();
-
-// ====== Register service worker (PWA/offline) ======
+// ---------- Register service worker (PWA/offline) ----------
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", async () => {
     try{
       await navigator.serviceWorker.register("./sw.js");
     }catch(e){
-      // tyst fail - appen funkar ändå
       console.warn("SW registration failed", e);
     }
   });
