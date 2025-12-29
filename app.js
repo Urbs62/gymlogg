@@ -549,19 +549,3 @@ if ("serviceWorker" in navigator) {
     }
   });
 }
-
-// Splash: visa lite längre, fasa ut, ta bort ur DOM
-window.addEventListener("load", () => {
-  const splash = document.getElementById("splash");
-  if (!splash) return;
-
-  const SHOW_MS = 1800;   // hur länge den visas "fullt"
-  const FADE_MS = 500;    // måste matcha CSS transition (500ms)
-
-  setTimeout(() => {
-    splash.classList.add("hide");
-    setTimeout(() => {
-      splash.classList.add("gone");
-    }, FADE_MS);
-  }, SHOW_MS);
-});
