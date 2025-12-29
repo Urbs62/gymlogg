@@ -40,16 +40,21 @@ body{
   max-width:980px;
   margin:0 auto;
   padding: 0 16px 12px;
-  display:flex;
-  flex-wrap:wrap;          /* tillåt radbrytning */
+  display:grid;
+  grid-template-columns: repeat(4, 1fr); /* desktop: 4 i rad */
   gap:8px;
-  justify-content:center;  /* centrera på mobil */
+}
+
+@media (max-width: 700px){
+  .tabs{
+    grid-template-columns: repeat(2, 1fr); /* mobil: 2+2 */
+  }
 }
 
 .tabs button{
-  flex:1 1 140px;          /* 2+2 på mobil */
-  max-width:220px;         /* rimlig bredd på desktop */
-  white-space:nowrap;      /* bryt inte texten */
+  width:100%;
+  max-width:none;
+  white-space:nowrap;
 }
 
 .tab{
