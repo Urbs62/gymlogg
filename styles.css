@@ -62,9 +62,9 @@ body{
 }
 
 .tabs button{
-  width:100%;
-  max-width:none;
-  white-space:nowrap;
+  flex: 0 0 calc(50% - 4px);   /* exakt 2 per rad */
+  max-width: none;
+  white-space: nowrap;
 }
 
 .tab{
