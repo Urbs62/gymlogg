@@ -36,6 +36,16 @@ body{
 .title{ font-weight:800; letter-spacing:.2px; }
 .subtitle{ color:var(--muted); font-size:13px; margin-top:2px; }
 
+.logoImg{
+  width:48px;
+  height:48px;
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,.10);
+  background: rgba(255,255,255,.06);
+  object-fit: cover;
+  flex: 0 0 auto;
+}
+
 .tabs{
   max-width:980px;
   margin:0 auto;
