@@ -1,5 +1,6 @@
 /* Ett Pass Till — superenkel gymapp (offline/localStorage) */
-const APP_VERSION = "1.2";
+const APP_VERSION = "9.9.9-TEST";
+
 const SW_VERSION = "1.2";
 const CACHE_NAME = `gymlogg-${SW_VERSION}`;
 
