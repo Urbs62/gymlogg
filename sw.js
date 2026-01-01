@@ -1,5 +1,8 @@
-const SW_VERSION = "1.2"; // <-- ändra vid varje release
-const CACHE_NAME = `gymlogg-${SW_VERSION}`;
+importScripts("./version.js");
+
+const CACHE_NAME = `gymlogg-${self.SW_VERSION || "0.0.0"}`;
+
+// const SW_VERSION = "1.2"; // <-- ändra vid varje release
 
 const ASSETS = [
   "./",
