@@ -2,8 +2,6 @@ importScripts("./version.js");
 
 const CACHE_NAME = `gymlogg-${self.SW_VERSION || "0.0.0"}`;
 
-// const SW_VERSION = "1.2"; // <-- ändra vid varje release
-
 const ASSETS = [
   "./",
   "./index.html",
