@@ -1,5 +1,5 @@
-const VERSION = "v2.1"; // <-- ändra vid varje release
-const CACHE = `gymlogg-${VERSION}`;
+const SW_VERSION = "1.2"; // <-- ändra vid varje release
+const CACHE_NAME = `gymlogg-${SW_VERSION}`;
 
 const ASSETS = [
   "./",
