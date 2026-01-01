@@ -556,4 +556,10 @@ if ("serviceWorker" in navigator) {
       console.warn("SW registration failed", e);
     }
   });
+
+  const vEl = document.getElementById("appVersion");
+    if (vEl) {
+      vEl.textContent = `v${APP_VERSION}`;
+}
+
 }
