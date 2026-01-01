@@ -12,6 +12,26 @@ const LS = {
 
 const uid = () => Math.random().toString(16).slice(2) + Date.now().toString(16);
 
+function setVersionText(v){
+  const el = document.getElementById("appVersion");
+  if (el) el.textContent = `v${v}`;
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  // fallback
+  setVersionText(APP_VERSION);
+
+  // fråga service worker om version
+  if (navigator.serviceWorker?.controller) {
+    navigator.serviceWorker.addEventListener("message", (event) => {
+      if (event.data?.type === "SW_VERSION") {
+        setVersionText(event.data.value);
+      }
+    });
+    navigator.serviceWorker.controller.postMessage("GET_SW_VERSION");
+  }
+});
+
 document.addEventListener("DOMContentLoaded", () => {
   const v = document.getElementById("appVersion");
   if (v) v.textContent = `v${APP_VERSION}`;
