@@ -9,6 +9,11 @@ const LS = {
 
 const uid = () => Math.random().toString(16).slice(2) + Date.now().toString(16);
 
+document.addEventListener("DOMContentLoaded", () => {
+  const v = document.getElementById("appVersion");
+  if (v) v.textContent = `v${APP_VERSION}`;
+});
+
 function load(key, fallback){
   try{
     const raw = localStorage.getItem(key);
