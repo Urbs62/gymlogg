@@ -1,5 +1,6 @@
 /* Ett Pass Till — superenkel gymapp (offline/localStorage) */
-const APP_VERSION = "1.3";
+const APP_VERSION = self.APP_VERSION || "0.0.0";
+const SW_VERSION  = self.SW_VERSION  || APP_VERSION;
 
 const LS = {
   stations: "ept_stations_v1",
