@@ -10,6 +10,19 @@ const ASSETS = [
   "./icons/icon-192.png",
   "./icons/icon-512.png",
 ];
+self.addEventListener("install", e => self.skipWaiting());
+self.addEventListener("activate", e => self.clients.claim());
+
+self.addEventListener("message", (event) => {
+  if (event.data === "GET_SW_VERSION") {
+    event.source?.postMessage({
+      type: "SW_VERSION",
+      value: SW_VERSION
+    });
+  }
+});
+
+
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -79,9 +92,5 @@ self.addEventListener("fetch", (event) => {
     caches.match(req).then(cached => cached || fetch(req))
   );
 
-  self.addEventListener("message", (event) => {
-  if (event.data && event.data.type === "GET_SW_VERSION") {
-    event.ports[0].postMessage({ swVersion: SW_VERSION });
-  }
 });
 });
