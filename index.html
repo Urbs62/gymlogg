@@ -30,7 +30,7 @@
   
   <nav class="tabs">
     <button class="tab active" data-tab="stations">1. Stationer</button>
-    <button class="tab" data-tab="plans">2. Planer</button>
+    <button class="tab" data-tab="plans">2. Pass</button>
     <button class="tab" data-tab="workout">3. Träning</button>
     <button class="tab" data-tab="history">4. Historik</button>
   </nav>
@@ -78,12 +78,12 @@
       </div>
     </section>
 
-    <!-- PLANER -->
+    <!-- PASS -->
     <section id="tab-plans" class="panel">
-      <h2>Planer</h2>
+      <h2>Pass</h2>
 
       <div class="card">
-        <h3>Skapa ny plan</h3>
+        <h3>Skapa nytt pass</h3>
         <form id="planCreateForm" class="row">
           <input id="planName" placeholder="Ex: Pass A" required />
           <button class="primary" type="submit">Skapa</button>
@@ -124,7 +124,7 @@
       <div class="card">
         <div class="row">
           <label class="grow">
-            Välj plan att köra
+            Välj pass att köra
             <select id="workoutPlanSelect"></select>
           </label>
           <button id="workoutLoadBtn" class="primary" type="button">Starta</button>
