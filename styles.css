@@ -233,3 +233,33 @@ td.muted{ color: var(--muted); }
 .muted{ color: var(--muted); font-size:13px; }
 .hint{ color: var(--muted); font-size:13px; margin: 10px 0 0; }
 
+
+/* === FORCE 2+2 on phones (Samsung S22 etc) === */
+@media (max-width: 720px){
+  .tabs{
+    display:flex !important;
+    flex-wrap:wrap !important;
+    gap:8px !important;
+    justify-content:center;
+  }
+
+  .tabs .tab{
+    flex: 0 0 calc(50% - 4px) !important; /* exakt två per rad */
+    max-width: none !important;
+    width: auto !important;
+    white-space: nowrap;
+  }
+}
+
+/* === Keep 4 in a row on larger screens/tablets/desktop === */
+@media (min-width: 721px){
+  .tabs{
+    display:flex !important;
+    flex-wrap:nowrap !important;
+    gap:8px !important;
+  }
+  .tabs .tab{
+    flex: 1 1 0 !important;
+    max-width: 220px !important;
+  }
+}
