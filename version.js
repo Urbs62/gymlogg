@@ -1,3 +1,3 @@
 // version.js
-window.EPT_VERSION = "1.7";
+window.EPT_VERSION = "1.8";
 
