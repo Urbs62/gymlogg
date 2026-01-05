@@ -36,6 +36,14 @@ body{
 .title{ font-weight:800; letter-spacing:.2px; }
 .subtitle{ color:var(--muted); font-size:13px; margin-top:2px; }
 
+.tm{
+  font-size: 12px;
+  vertical-align: super;
+  margin-left: 2px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
 .ver{
   margin-left: 8px;
   font-size: 12px;
