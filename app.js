@@ -616,7 +616,89 @@ importAllFile.addEventListener("change", async () => {
     importAllFile.value = "";
   }
 });
-  
+
+const rebuildFromHistoryBtn = document.getElementById("rebuildFromHistoryBtn");
+
+rebuildFromHistoryBtn.addEventListener("click", () => {
+  if (!state.history.length){
+    alert("Ingen historik att återskapa från.");
+    return;
+  }
+
+  const ok = confirm(
+    "Återskapa stationer & planer från historiken?\n\n" +
+    "Detta kan skapa dubletter om du redan har stationer/planer.\n" +
+    "Tips: Exportera ALLT (JSON) först om du vill kunna backa."
+  );
+  if (!ok) return;
+
+  // --- 1) Stationer: stationName -> stationId ---
+  const nameToId = new Map(state.stations.map(s => [s.name, s.id]));
+
+  for (const r of state.history){
+    const name = (r.stationName || "").trim();
+    if (!name) continue;
+
+    if (!nameToId.has(name)){
+      const id = uid();
+      nameToId.set(name, id);
+
+      state.stations.push({
+        id,
+        name,
+        defaultWeight: r.weight === "" ? null : Number(r.weight),
+        defaultSets:   r.sets   === "" ? null : Number(r.sets),
+        defaultReps:   r.reps   === "" ? null : Number(r.reps),
+      });
+    }
+  }
+
+  // --- 2) Planer: planName -> planObj ---
+  const planByName = new Map(state.plans.map(p => [p.name, p]));
+  const seen = new Set(); // `${planName}__${stationId}`
+
+  // OBS: Om din history är newest-first så tar vi första förekomsten som “senaste värden”.
+  for (const r of state.history){
+    const planName = (r.planName || "").trim();
+    const stationName = (r.stationName || "").trim();
+    if (!planName || !stationName) continue;
+
+    const stationId = nameToId.get(stationName);
+    if (!stationId) continue;
+
+    let plan = planByName.get(planName);
+    if (!plan){
+      plan = { id: uid(), name: planName, items: [] };
+      planByName.set(planName, plan);
+      state.plans.push(plan);
+    }
+
+    const key = `${planName}__${stationId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    plan.items.push({
+      stationId,
+      weight: r.weight === "" ? null : Number(r.weight),
+      sets:   r.sets   === "" ? null : Number(r.sets),
+      reps:   r.reps   === "" ? null : Number(r.reps),
+    });
+  }
+
+  // spara
+  save(LS.stations, state.stations);
+  save(LS.plans, state.plans);
+
+  // uppdatera UI
+  renderStations();
+  renderPlanSelectors(true);
+  renderPlanEditor();
+  renderWorkoutSelectors();
+  renderWorkoutChecklist();
+
+  alert("Återskapning klar! Kolla Stationer och Planer.");
+});
+
 const rebuildBtn = document.getElementById("rebuildBtn");
 
 rebuildBtn.addEventListener("click", () => {
