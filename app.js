@@ -498,6 +498,7 @@ function renderWorkoutChecklist(){
 const exportCsvBtn = document.getElementById("exportCsvBtn");
 const clearHistoryBtn = document.getElementById("clearHistoryBtn");
 const historyTable = document.getElementById("historyTable");
+const historySummary = document.getElementById("historySummary");
 
 exportCsvBtn.addEventListener("click", () => {
   if (!state.history.length){
@@ -748,7 +749,89 @@ clearHistoryBtn.addEventListener("click", () => {
   renderHistory();
 });
 
+function parseSvDateToDate(s){
+  // klarar "2026-01-05 15:49" och "2026-01-05 15:49:12"
+  if (!s) return null;
+  const t = s.trim().replace(" ", "T");
+  const d = new Date(t);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function isoWeekKey(d){
+  // ISO week: YYYY-Www
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(),0,1));
+  const weekNo = Math.ceil((((date - yearStart) / 86400000) + 1)/7);
+  const yyyy = date.getUTCFullYear();
+  return `${yyyy}-W${String(weekNo).padStart(2,"0")}`;
+}
+
 function renderHistory(){
+  // Summering
+  if (historySummary){
+    if (!state.history.length){
+      historySummary.innerHTML = `<div class="muted">Ingen historik att summera ännu.</div>`;
+    } else {
+      // “Pass” = gruppera på (date + planName) – funkar med ditt format
+      const passMap = new Map(); // key -> {date, planName, durationMin, rows}
+      for (const r of state.history){
+        const key = `${r.date}__${r.planName}`;
+        if (!passMap.has(key)){
+          passMap.set(key, { date: r.date, planName: r.planName, durationMin: r.durationMin ?? null, rows: 0 });
+        }
+        passMap.get(key).rows++;
+      }
+
+      const passCount = passMap.size;
+
+      // total tid (om du har durationMin)
+      let totalMin = 0;
+      let hasAnyDuration = false;
+      for (const p of passMap.values()){
+        if (p.durationMin != null && !isNaN(p.durationMin)){
+          totalMin += Number(p.durationMin);
+          hasAnyDuration = true;
+        }
+      }
+
+      // per vecka
+      const weekMap = new Map(); // weekKey -> {passes, minutes}
+      for (const p of passMap.values()){
+        const d = parseSvDateToDate(p.date);
+        if (!d) continue;
+        const wk = isoWeekKey(d);
+        if (!weekMap.has(wk)) weekMap.set(wk, { passes: 0, minutes: 0 });
+        const w = weekMap.get(wk);
+        w.passes++;
+        if (p.durationMin != null && !isNaN(p.durationMin)){
+          w.minutes += Number(p.durationMin);
+        }
+      }
+
+      const weeksSorted = Array.from(weekMap.entries()).sort((a,b)=>a[0] < b[0] ? 1 : -1).slice(0, 6);
+
+      historySummary.innerHTML = `
+        <h3>Summering</h3>
+        <div class="muted">Antal pass: <strong>${passCount}</strong></div>
+        <div class="muted">Total tid: <strong>${hasAnyDuration ? totalMin + " min" : "—"}</strong></div>
+        <hr class="sep">
+        <div class="muted"><strong>Senaste veckor</strong></div>
+        <div class="tableWrap">
+          <table>
+            <thead><tr><th>Vecka</th><th>Pass</th><th>Tid (min)</th></tr></thead>
+            <tbody>
+              ${weeksSorted.map(([wk,v]) => `
+                <tr><td>${wk}</td><td>${v.passes}</td><td>${hasAnyDuration ? v.minutes : "—"}</td></tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+  }
+
   if (!state.history.length){
     historyTable.innerHTML = `<div class="muted">Ingen historik ännu. Kör ett pass under “Träning”.</div>`;
     return;
