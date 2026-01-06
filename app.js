@@ -39,6 +39,26 @@ document.addEventListener("DOMContentLoaded", () => {
   if (v) v.textContent = `v${APP_VERSION}`;
 });
 
+function formatDateRoundedToMinute(d){
+  const rounded = new Date(d);
+
+  // avrunda till närmaste minut
+  if (rounded.getSeconds() >= 30) {
+    rounded.setMinutes(rounded.getMinutes() + 1);
+  }
+
+  rounded.setSeconds(0);
+  rounded.setMilliseconds(0);
+
+  return rounded.toLocaleString("sv-SE", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
 function load(key, fallback){
   try{
     const raw = localStorage.getItem(key);
@@ -401,7 +421,7 @@ workoutFinishBtn.addEventListener("click", () => {
     : `\nTotal tid: ${totalMinutes} min.`;
 
   const now = new Date();
-  const date = now.toLocaleString("sv-SE"); // fin tidsstämpel
+  const date = formatDateRoundedToMinute(now);
 
   // Spara en rad per station (med planens värden)
   p.items.forEach(it => {
