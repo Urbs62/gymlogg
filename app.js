@@ -546,6 +546,77 @@ importCsvFile.addEventListener("change", async () => {
     return;
   }
 
+const exportAllBtn = document.getElementById("exportAllBtn");
+const importAllBtn = document.getElementById("importAllBtn");
+const importAllFile = document.getElementById("importAllFile");
+
+exportAllBtn.addEventListener("click", () => {
+  const payload = {
+    app: "Ett Pass Till",
+    exportedAt: new Date().toISOString(),
+    stations: state.stations,
+    plans: state.plans,
+    history: state.history
+  };
+
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "ett-pass-till-backup.json";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  URL.revokeObjectURL(url);
+});
+
+importAllBtn.addEventListener("click", () => importAllFile.click());
+
+importAllFile.addEventListener("change", async () => {
+  const file = importAllFile.files?.[0];
+  if (!file) return;
+
+  try{
+    const text = await file.text();
+    const data = JSON.parse(text);
+
+    if (!data || typeof data !== "object") throw new Error("Ogiltigt JSON-format");
+
+    const newStations = Array.isArray(data.stations) ? data.stations : [];
+    const newPlans    = Array.isArray(data.plans) ? data.plans : [];
+    const newHistory  = Array.isArray(data.history) ? data.history : [];
+
+    const ok = confirm(
+      `Importera backup?\n\nStationer: ${newStations.length}\nPlaner: ${newPlans.length}\nHistorik: ${newHistory.length}\n\nDetta skriver över allt som finns i appen nu.`
+    );
+    if (!ok) return;
+
+    state.stations = newStations;
+    state.plans = newPlans;
+    state.history = newHistory;
+
+    save(LS.stations, state.stations);
+    save(LS.plans, state.plans);
+    save(LS.history, state.history);
+
+    // uppdatera UI
+    renderStations();
+    renderPlanSelectors(true);
+    renderPlanEditor();
+    renderWorkoutSelectors();
+    renderWorkoutChecklist();
+    renderHistory();
+
+    alert("Import klar!");
+  }catch(e){
+    alert("Kunde inte importera JSON-backup: " + (e?.message || e));
+  }finally{
+    importAllFile.value = "";
+  }
+});
+
   const header = lines[0].split(";").map(h => h.trim().toLowerCase());
 
   const idx = (name) => header.indexOf(name);
