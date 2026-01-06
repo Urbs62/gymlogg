@@ -528,6 +528,66 @@ exportCsvBtn.addEventListener("click", () => {
   URL.revokeObjectURL(url);
 });
 
+const importCsvBtn  = document.getElementById("importCsvBtn");
+const importCsvFile = document.getElementById("importCsvFile");
+
+importCsvBtn.addEventListener("click", () => {
+  importCsvFile.click();
+});
+
+importCsvFile.addEventListener("change", async () => {
+  const file = importCsvFile.files[0];
+  if (!file) return;
+
+  const text = await file.text();
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  if (lines.length < 2) {
+    alert("CSV-filen verkar tom.");
+    return;
+  }
+
+  const header = lines[0].split(";").map(h => h.trim().toLowerCase());
+
+  const idx = (name) => header.indexOf(name);
+
+  const iDate    = idx("datum");
+  const iPlan    = idx("plan");
+  const iStation = idx("station");
+  const iWeight  = idx("vikt");
+  const iSets    = idx("set");
+  const iReps    = idx("reps");
+
+  if ([iDate, iPlan, iStation].some(i => i === -1)) {
+    alert("CSV-filen saknar nödvändiga kolumner.");
+    return;
+  }
+
+  const imported = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(";");
+
+    imported.push({
+      ts: Date.now() - i * 1000,   // behåller ordning
+      date: cols[iDate]?.trim() || "",
+      planName: cols[iPlan]?.trim() || "",
+      stationName: cols[iStation]?.trim() || "",
+      weight: cols[iWeight]?.trim() || "",
+      sets: cols[iSets]?.trim() || "",
+      reps: cols[iReps]?.trim() || "",
+      durationMin: null            // fanns inte i filen
+    });
+  }
+
+  state.history = [...imported, ...state.history];
+  save(LS.history, state.history);
+  renderHistory();
+
+  importCsvFile.value = "";
+  alert(`Importerade ${imported.length} historikrader.`);
+});
+
+
 clearHistoryBtn.addEventListener("click", () => {
   if (!confirm("Rensa all historik?")) return;
   state.history = [];
