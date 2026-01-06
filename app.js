@@ -61,7 +61,9 @@ const state = {
   stations: load(LS.stations, []),
   plans: load(LS.plans, []),  // {id,name,items:[{stationId, weight, sets, reps}]}
   history: load(LS.history, []), // {ts, date, planName, stationName, weight, sets, reps}
-  workout: { planId: null, done: {} }
+  workout: { planId: null, done: {}, startedAt: null }
+
+  // ---- tidigare kod  workout: { planId: null, done: {} } ----
 };
 
 // ---------- Tabs ----------
@@ -374,17 +376,29 @@ const workoutResetBtn = document.getElementById("workoutResetBtn");
 workoutLoadBtn.addEventListener("click", () => {
   state.workout.planId = workoutPlanSelect.value || null;
   state.workout.done = {};
+  state.workout.startedAt = Date.now();   // <-- NY
   renderWorkoutChecklist();
 });
 
 workoutResetBtn.addEventListener("click", () => {
   state.workout.done = {};
+  state.workout.startedAt = Date.now(); // starta om tiden vid reset
   renderWorkoutChecklist();
 });
 
 workoutFinishBtn.addEventListener("click", () => {
   const p = getWorkoutPlan();
   if (!p) return;
+ 
+  const started = state.workout.startedAt;
+  const ended = Date.now();
+
+  // total tid i minuter, avrundat till närmaste minut (du kan ändra till floor om du vill)
+  const totalMinutes = started ? Math.round((ended - started) / 60000) : null;
+
+  const totalText = totalMinutes == null
+    ? ""
+    : `\nTotal tid: ${totalMinutes} min.`;
 
   const now = new Date();
   const date = now.toLocaleString("sv-SE"); // fin tidsstämpel
@@ -410,6 +424,8 @@ workoutFinishBtn.addEventListener("click", () => {
   renderWorkoutChecklist();
 
   // hoppa till Historik
+  alert(`Passet "${p.name}" sparat i historiken.${totalText}`);
+
   document.querySelector('.tab[data-tab="history"]').click();
 });
 
