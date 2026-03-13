@@ -492,11 +492,20 @@ function renderWorkoutChecklist(){
     ].filter(Boolean).join(" • ");
 
     return `
-      <div class="rowline">
-        <input type="checkbox" data-widx="${idx}" ${done ? "checked" : ""} />
-        <div class="grow">
-          <div><strong>${name}</strong> ${badge}</div>
-          <div class="muted">${meta || "—"}</div>
+      <div class="rowline workout-row">
+        <input type="checkbox" class="workout-check" data-widx="${idx}" ${done ? "checked" : ""} />
+    
+        <div class="grow workout-info">
+          <div class="workout-title-row">
+            <div class="workout-name">${name}</div>
+            ${badge}
+          </div>
+    
+          <div class="workout-stats">
+            <span class="workout-stat">Vikt: ${it.weight ?? "—"}</span>
+            <span class="workout-stat">Set: ${it.sets ?? "—"}</span>
+            <span class="workout-stat">Reps: ${it.reps ?? "—"}</span>
+          </div>
         </div>
       </div>
     `;
