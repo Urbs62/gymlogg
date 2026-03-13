@@ -279,3 +279,67 @@ td.muted{ color: var(--muted); }
     max-width: 220px !important;
   }
 }
+
+/* ===== Träningsläge: större och tydligare ===== */
+
+.workout-row{
+  align-items: flex-start;
+}
+
+.workout-check{
+  width: 22px;
+  height: 22px;
+  margin-top: 4px;
+  flex: 0 0 auto;
+}
+
+.workout-info{
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.workout-title-row{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.workout-name{
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.workout-stats{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.workout-stat{
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+  background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 12px;
+  padding: 6px 10px;
+}
+
+@media (max-width: 700px){
+  .workout-name{
+    font-size: 19px;
+  }
+
+  .workout-stat{
+    font-size: 18px;
+    padding: 8px 10px;
+  }
+
+  .workout-check{
+    width: 24px;
+    height: 24px;
+  }
+}
