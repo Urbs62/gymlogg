@@ -12,6 +12,30 @@ const LS = {
   history: "ept_history_v1",
 };
 
+// Missing types in older localStorage and backups always mean strength.
+const stationTypeOf = record => record?.type === "cardio" ? "cardio" : "strength";
+const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, c => ({
+  "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+}[c]));
+const cardioFields = ["hours", "minutes", "seconds", "distanceKm", "comment"];
+function cardioValues(item = {}){
+  return Object.fromEntries(cardioFields.map(field => [field, item[field] ?? (field === "comment" ? "" : 0)]));
+}
+function cardioInputs(item, attribute){
+  return '<div class="grid cardio-inputs">' + [
+    ["hours", "Timmar", 'step="1"'],
+    ["minutes", "Minuter", 'step="1" max="59"'],
+    ["seconds", "Sekunder", 'step="1" max="59"'],
+    ["distanceKm", "Distans (km)", 'step="any"']
+  ].map(([field, label, limits]) =>
+    `<label>${label}<input ${attribute} data-field="${field}" type="number" min="0" ${limits} required value="${escapeHtml(item[field] ?? 0)}"></label>`
+  ).join("") + `<label class="cardio-comment">Kommentar (valfri)<input ${attribute} data-field="comment" type="text" value="${escapeHtml(item.comment)}"></label></div>`;
+}
+function formatCardioDuration(record){
+  return [record.hours ?? 0, record.minutes ?? 0, record.seconds ?? 0]
+    .map(v => String(v).padStart(2, "0")).join(":");
+}
+
 const uid = () => Math.random().toString(16).slice(2) + Date.now().toString(16);
 
 function setVersionText(v){
@@ -71,6 +95,27 @@ function save(key, value){
   localStorage.setItem(key, JSON.stringify(value));
 }
 
+// Read quoted fields, semicolons and line breaks produced by our CSV exporter.
+function parseCsv(text){
+  const rows = []; let row = [], value = "", quoted = false;
+  text = text.replace(/^\uFEFF/, "");
+  for (let i = 0; i < text.length; i++){
+    const c = text[i];
+    if (c === '"'){
+      if (quoted && text[i + 1] === '"'){ value += '"'; i++; }
+      else quoted = !quoted;
+    } else if (!quoted && (c === ";" || c === "\n" || c === "\r")){
+      row.push(value); value = "";
+      if (c !== ";"){
+        rows.push(row); row = [];
+        if (c === "\r" && text[i + 1] === "\n") i++;
+      }
+    } else value += c;
+  }
+  row.push(value); rows.push(row);
+  return rows;
+}
+
 function escapeCsv(v){
   const s = String(v ?? "");
   if (/[",\n;]/.test(s)) return `"${s.replaceAll('"','""')}"`;
@@ -115,11 +160,20 @@ tabs.forEach(btn => {
 const stationForm = document.getElementById("stationForm");
 const stationId = document.getElementById("stationId");
 const stationName = document.getElementById("stationName");
+const stationType = document.getElementById("stationType");
 const stationDefaultWeight = document.getElementById("stationDefaultWeight");
 const stationDefaultSets = document.getElementById("stationDefaultSets");
 const stationDefaultReps = document.getElementById("stationDefaultReps");
 const stationCancelBtn = document.getElementById("stationCancelBtn");
 const stationsList = document.getElementById("stationsList");
+
+function updateStationTypeInputs(){
+  [stationDefaultWeight, stationDefaultSets, stationDefaultReps].forEach(input => {
+    input.disabled = stationType.value === "cardio";
+    input.closest("label").hidden = input.disabled;
+  });
+}
+stationType.addEventListener("change", updateStationTypeInputs);
 
 stationCancelBtn.addEventListener("click", () => clearStationForm());
 
@@ -135,7 +189,7 @@ stationForm.addEventListener("submit", (e) => {
   const id = stationId.value || uid();
 
   const existingIdx = state.stations.findIndex(x => x.id === id);
-  const obj = { id, name, defaultWeight: w, defaultSets: s, defaultReps: r };
+  const obj = { ...state.stations[existingIdx], id, name, type: stationType.value, defaultWeight: w, defaultSets: s, defaultReps: r };
 
   if (existingIdx >= 0) state.stations[existingIdx] = obj;
   else state.stations.push(obj);
@@ -150,6 +204,8 @@ stationForm.addEventListener("submit", (e) => {
 function clearStationForm(){
   stationId.value = "";
   stationName.value = "";
+  stationType.value = "strength";
+  updateStationTypeInputs();
   stationDefaultWeight.value = "";
   stationDefaultSets.value = "";
   stationDefaultReps.value = "";
@@ -165,7 +221,7 @@ function renderStations(){
     .slice()
     .sort((a,b) => a.name.localeCompare(b.name, "sv"))
     .map(s => {
-      const meta = [
+      const meta = stationTypeOf(s) === "cardio" ? "Kondition" : [
         s.defaultWeight != null ? `${s.defaultWeight} kg` : null,
         s.defaultSets != null ? `${s.defaultSets} set` : null,
         s.defaultReps != null ? `${s.defaultReps} reps` : null
@@ -174,7 +230,7 @@ function renderStations(){
       return `
         <div class="item">
           <div>
-            <div class="name">${s.name}</div>
+            <div class="name">${escapeHtml(s.name)}</div>
             <div class="meta">${meta || "—"}</div>
           </div>
           <div class="btns">
@@ -193,6 +249,8 @@ function renderStations(){
       if (!s) return;
       stationId.value = s.id;
       stationName.value = s.name;
+      stationType.value = stationTypeOf(s);
+      updateStationTypeInputs();
       stationDefaultWeight.value = s.defaultWeight ?? "";
       stationDefaultSets.value = s.defaultSets ?? "";
       stationDefaultReps.value = s.defaultReps ?? "";
@@ -282,6 +340,7 @@ planAddStationBtn.addEventListener("click", () => {
     sets: st?.defaultSets ?? null,
     reps: st?.defaultReps ?? null
   };
+  if (stationTypeOf(st) === "cardio") Object.assign(item, cardioValues());
   p.items.push(item);
   save(LS.plans, state.plans);
   renderPlanEditor();
@@ -338,9 +397,13 @@ function renderPlanEditor(){
   const rows = p.items.map((it, idx) => {
     const st = state.stations.find(s => s.id === it.stationId);
     const name = st?.name ?? "(saknad station)";
+    if (stationTypeOf(st) === "cardio") return `
+      <tr><td>${escapeHtml(name)}<div class="muted">Kondition</div></td>
+      <td colspan="3">${cardioInputs(it, `data-pidx="${idx}"`)}</td>
+      <td><button class="danger" type="button" data-remove="${idx}">Ta bort</button></td></tr>`;
     return `
       <tr>
-        <td>${name}</td>
+        <td>${escapeHtml(name)}</td>
         <td><input data-pidx="${idx}" data-field="weight" type="number" step="0.5" min="0" value="${it.weight ?? ""}" placeholder="kg"></td>
         <td><input data-pidx="${idx}" data-field="sets" type="number" step="1" min="1" value="${it.sets ?? ""}" placeholder="set"></td>
         <td><input data-pidx="${idx}" data-field="reps" type="number" step="1" min="1" value="${it.reps ?? ""}" placeholder="reps"></td>
@@ -370,7 +433,8 @@ function renderPlanEditor(){
     inp.addEventListener("input", () => {
       const idx = Number(inp.dataset.pidx);
       const field = inp.dataset.field;
-      const val = inp.value === "" ? null : Number(inp.value);
+      if (cardioFields.includes(field) && !inp.reportValidity()) return;
+      const val = field === "comment" ? inp.value : inp.value === "" ? null : Number(inp.value);
       p.items[idx][field] = val;
       save(LS.plans, state.plans);
     });
@@ -396,12 +460,14 @@ const workoutResetBtn = document.getElementById("workoutResetBtn");
 workoutLoadBtn.addEventListener("click", () => {
   state.workout.planId = workoutPlanSelect.value || null;
   state.workout.done = {};
+  state.workout.cardio = {};
   state.workout.startedAt = Date.now();   // <-- NY
   renderWorkoutChecklist();
 });
 
 workoutResetBtn.addEventListener("click", () => {
   state.workout.done = {};
+  state.workout.cardio = {};
   state.workout.startedAt = Date.now(); // starta om tiden vid reset
   renderWorkoutChecklist();
 });
@@ -410,6 +476,10 @@ workoutFinishBtn.addEventListener("click", () => {
   const p = getWorkoutPlan();
   if (!p) return;
  
+  // Validate before writing any history; incomplete/invalid cardio entries stay editable.
+  for (const input of workoutChecklist.querySelectorAll("[data-cardio-idx]")) {
+    if (!input.reportValidity()) return;
+  }
   const started = state.workout.startedAt;
   const ended = Date.now();
 
@@ -424,16 +494,19 @@ workoutFinishBtn.addEventListener("click", () => {
   const date = formatDateRoundedToMinute(now);
 
   // Spara en rad per station (med planens värden)
-  p.items.forEach(it => {
+  p.items.forEach((it, idx) => {
     const st = state.stations.find(s => s.id === it.stationId);
     state.history.unshift({
       ts: now.getTime(),
       date,
       planName: p.name,
       stationName: st?.name ?? "(saknad station)",
-      weight: it.weight ?? "",
-      sets: it.sets ?? "",
-      reps: it.reps ?? ""
+      ...(stationTypeOf(st) === "cardio"
+        ? { type: "cardio", ...cardioValues(state.workout.cardio?.[idx] ?? it) }
+        : {}),
+      weight: stationTypeOf(st) === "cardio" ? "" : it.weight ?? "",
+      sets: stationTypeOf(st) === "cardio" ? "" : it.sets ?? "",
+      reps: stationTypeOf(st) === "cardio" ? "" : it.reps ?? ""
     });
   });
 
@@ -441,6 +514,7 @@ workoutFinishBtn.addEventListener("click", () => {
 
   // Efter avslut: nollställ checklista men behåll plan-val
   state.workout.done = {};
+  state.workout.cardio = {};
   renderWorkoutChecklist();
 
   // hoppa till Historik
@@ -497,21 +571,31 @@ function renderWorkoutChecklist(){
     
         <div class="grow workout-info">
           <div class="workout-title-row">
-            <div class="workout-name">${name}</div>
+            <div class="workout-name">${escapeHtml(name)}</div>
             ${badge}
           </div>
     
-          <div class="workout-stats">
+          ${stationTypeOf(st) === "cardio" ? cardioInputs(state.workout.cardio?.[idx] ?? it, `data-cardio-idx="${idx}"`) : `<div class="workout-stats">
             <span class="workout-stat">Vikt: ${it.weight ?? "—"}</span>
             <span class="workout-stat">Set: ${it.sets ?? "—"}</span>
             <span class="workout-stat">Reps: ${it.reps ?? "—"}</span>
-          </div>
+          </div>`}
         </div>
       </div>
     `;
   }).join("");
 
   workoutChecklist.innerHTML = html;
+
+  workoutChecklist.querySelectorAll("[data-cardio-idx]").forEach(input => {
+    input.addEventListener("input", () => {
+      const idx = Number(input.dataset.cardioIdx);
+      state.workout.cardio ??= {};
+      state.workout.cardio[idx] ??= cardioValues(p.items[idx]);
+      state.workout.cardio[idx][input.dataset.field] = input.dataset.field === "comment"
+        ? input.value : input.value === "" ? "" : Number(input.value);
+    });
+  });
 
   workoutChecklist.querySelectorAll('input[type="checkbox"][data-widx]').forEach(cb => {
     cb.addEventListener("change", () => {
@@ -535,9 +619,10 @@ exportCsvBtn.addEventListener("click", () => {
     return;
   }
 
-  const header = ["datum", "plan", "station", "vikt", "set", "reps"];
+  const header = ["datum", "plan", "station", "vikt", "set", "reps", "typ", "timmar", "minuter", "sekunder", "distans_km", "kommentar"];
   const rows = state.history.map(r => ([
-    r.date, r.planName, r.stationName, r.weight, r.sets, r.reps
+    r.date, r.planName, r.stationName, r.weight, r.sets, r.reps, stationTypeOf(r),
+    r.hours, r.minutes, r.seconds, r.distanceKm, r.comment
   ]));
 
   // semikolon funkar bra i svensk Excel
@@ -570,36 +655,177 @@ importCsvFile.addEventListener("change", async () => {
   if (!file) return;
 
   const text = await file.text();
-  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const lines = parseCsv(text).filter(cols => cols.some(value => value.trim()));
   if (lines.length < 2) {
     alert("CSV-filen verkar tom.");
     return;
   }
 
+  const header = lines[0].map(h => h.trim().toLowerCase());
+
+  const idx = (name) => header.indexOf(name);
+
+  const iDate    = idx("datum");
+  const iPlan    = idx("plan");
+  const iStation = idx("station");
+  const iWeight  = idx("vikt");
+  const iSets    = idx("set");
+  const iReps    = idx("reps");
+
+  if ([iDate, iPlan, iStation].some(i => i === -1)) {
+    alert("CSV-filen saknar nödvändiga kolumner.");
+    return;
+  }
+
+  const imported = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i];
+
+    imported.push({
+      ts: Date.now() - i * 1000,   // behåller ordning
+      date: cols[iDate]?.trim() || "",
+      planName: cols[iPlan]?.trim() || "",
+      stationName: cols[iStation]?.trim() || "",
+      weight: cols[iWeight]?.trim() || "",
+      sets: cols[iSets]?.trim() || "",
+      reps: cols[iReps]?.trim() || "",
+      ...(cols[idx("typ")]?.trim() === "cardio" ? {
+        type: "cardio",
+        hours: Number(cols[idx("timmar")] || 0),
+        minutes: Number(cols[idx("minuter")] || 0),
+        seconds: Number(cols[idx("sekunder")] || 0),
+        distanceKm: Number((cols[idx("distans_km")] || "0").replace(",", ".")),
+        comment: cols[idx("kommentar")] || ""
+      } : {}),
+      durationMin: null
+    });
+  }
+
+  state.history = [...imported, ...state.history];
+  save(LS.history, state.history);
+  renderHistory();
+
+  importCsvFile.value = "";
+  alert(`Importerade ${imported.length} historikrader.`);
+});
+
+
 const exportAllBtn = document.getElementById("exportAllBtn");
 const importAllBtn = document.getElementById("importAllBtn");
 const importAllFile = document.getElementById("importAllFile");
 
-exportAllBtn.addEventListener("click", () => {
-  const payload = {
+const backupStatus = document.getElementById("backupStatus");
+const backupFallback = document.getElementById("backupFallback");
+const backupText = document.getElementById("backupText");
+const downloadBackupBtn = document.getElementById("downloadBackupBtn");
+let preparedBackup = null;
+const backupUrls = new Set();
+
+function createBackupPayload(){
+  // Include every app-owned key, including settings and unknown future keys.
+  // Raw values preserve data even if a stored value is not valid JSON.
+  const storage = {};
+  const settings = {};
+  for (let i = 0; i < localStorage.length; i++){
+    const key = localStorage.key(i);
+    if (!key?.startsWith("ept_")) continue;
+    const value = localStorage.getItem(key);
+    storage[key] = value;
+    if (!Object.values(LS).includes(key)){
+      try { settings[key] = JSON.parse(value); }
+      catch { settings[key] = value; }
+    }
+  }
+  return {
     app: "Ett Pass Till",
+    backupVersion: 1,
+    appVersion: APP_VERSION,
     exportedAt: new Date().toISOString(),
     stations: state.stations,
     plans: state.plans,
-    history: state.history
+    history: state.history,
+    settings,
+    localStorage: storage
   };
+}
 
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
+function downloadPreparedBackup(){
+  if (!preparedBackup) return;
+  let a;
+  try {
+    a = document.createElement("a");
+    if (!("download" in a)) throw new Error("Nedladdning stöds inte i den här webbläsaren.");
+    const url = URL.createObjectURL(preparedBackup.blob);
+    // Keep URLs alive while the page is open; Safari may consume them later.
+    backupUrls.add(url);
+    a.href = url;
+    a.download = preparedBackup.name;
+    document.body.appendChild(a);
+    a.click();
+    backupStatus.textContent = "Nedladdning begärd. Kontrollera Hämtningar eller appen Filer. Appen kan inte bekräfta att filen sparats. Om inget händer kan du kopiera backuptexten nedan.";
+  } catch (error) {
+    backupStatus.textContent = `Kunde inte starta nedladdningen: ${error?.message || error}. Kopiera backuptexten nedan eller försök exportera igen.`;
+  } finally {
+    a?.remove();
+  }
+}
 
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "ett-pass-till-backup.json";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+exportAllBtn.addEventListener("click", async () => {
+  if (exportAllBtn.disabled) return;
+  exportAllBtn.disabled = true;
+  downloadBackupBtn.disabled = true;
+  preparedBackup = null;
+  backupFallback.hidden = true;
+  backupText.value = "";
+  backupStatus.textContent = "Förbereder komplett backup…";
+  try {
+    const text = JSON.stringify(createBackupPayload(), null, 2);
+    preparedBackup = {
+      name: "ett-pass-till-backup.json",
+      blob: new Blob([text], { type: "application/json;charset=utf-8" })
+    };
+    backupText.value = text;
+    backupFallback.hidden = false;
 
-  URL.revokeObjectURL(url);
+    // No awaits before share(): iOS requires the original tap's user activation.
+    let file;
+    if (typeof navigator.share === "function" && typeof navigator.canShare === "function" && typeof File === "function"){
+      // Some platforms accept plain-text JSON but reject application/json.
+      for (const type of ["application/json", "text/plain"]){
+        const candidate = new File([text], preparedBackup.name, { type });
+        try {
+          if (navigator.canShare({ files: [candidate] })) { file = candidate; break; }
+        } catch { /* Unsupported file sharing: use the download path. */ }
+      }
+    }
+    if (file){
+      backupStatus.textContent = "Välj Spara i Filer i delningsrutan och bekräfta var backupen ska sparas.";
+      try {
+        await navigator.share({ files: [file] });
+        backupStatus.textContent = "Delningen avslutades utan rapporterat fel. Kontrollera att backupen finns i Filer eller hos mottagaren; appen kan inte bekräfta att filen sparats.";
+      } catch (error) {
+        backupStatus.textContent = error?.name === "AbortError"
+          ? "Delningen avbröts eller ingen mottagare var tillgänglig. Ingen sparad fil har bekräftats. Försök igen eller välj Ladda ner backup."
+          : `Delningen misslyckades: ${error?.message || error}. Försök igen eller välj Ladda ner backup. Du kan också kopiera backuptexten.`;
+        // A separate tap on Download provides fresh user activation after failure.
+      }
+    } else {
+      downloadPreparedBackup();
+    }
+  } catch (error) {
+    backupStatus.textContent = `Kunde inte skapa en komplett backup: ${error?.message || error}. Försök igen. Dina lokala data har inte ändrats.`;
+  } finally {
+    exportAllBtn.disabled = false;
+    downloadBackupBtn.disabled = false;
+  }
+});
+
+downloadBackupBtn.addEventListener("click", downloadPreparedBackup);
+window.addEventListener("pagehide", event => {
+  if (event.persisted) return;
+  backupUrls.forEach(url => URL.revokeObjectURL(url));
+  backupUrls.clear();
 });
 
 importAllBtn.addEventListener("click", () => importAllFile.click());
@@ -663,19 +889,21 @@ rebuildFromHistoryBtn.addEventListener("click", () => {
   if (!ok) return;
 
   // --- 1) Stationer: stationName -> stationId ---
-  const nameToId = new Map(state.stations.map(s => [s.name, s.id]));
+  const stationKey = r => `${stationTypeOf(r)}__${r.stationName ?? r.name}`;
+  const nameToId = new Map(state.stations.map(s => [stationKey(s), s.id]));
 
   for (const r of state.history){
     const name = (r.stationName || "").trim();
     if (!name) continue;
 
-    if (!nameToId.has(name)){
+    if (!nameToId.has(stationKey(r))){
       const id = uid();
-      nameToId.set(name, id);
+      nameToId.set(stationKey(r), id);
 
       state.stations.push({
         id,
         name,
+        type: stationTypeOf(r),
         defaultWeight: r.weight === "" ? null : Number(r.weight),
         defaultSets:   r.sets   === "" ? null : Number(r.sets),
         defaultReps:   r.reps   === "" ? null : Number(r.reps),
@@ -693,7 +921,7 @@ rebuildFromHistoryBtn.addEventListener("click", () => {
     const stationName = (r.stationName || "").trim();
     if (!planName || !stationName) continue;
 
-    const stationId = nameToId.get(stationName);
+    const stationId = nameToId.get(stationKey(r));
     if (!stationId) continue;
 
     let plan = planByName.get(planName);
@@ -709,6 +937,7 @@ rebuildFromHistoryBtn.addEventListener("click", () => {
 
     plan.items.push({
       stationId,
+      ...(stationTypeOf(r) === "cardio" ? cardioValues(r) : {}),
       weight: r.weight === "" ? null : Number(r.weight),
       sets:   r.sets   === "" ? null : Number(r.sets),
       reps:   r.reps   === "" ? null : Number(r.reps),
@@ -727,47 +956,6 @@ rebuildFromHistoryBtn.addEventListener("click", () => {
   renderWorkoutChecklist();
 
   alert("Återskapning klar! Kolla Stationer och Planer.");
-});
-
-  const header = lines[0].split(";").map(h => h.trim().toLowerCase());
-
-  const idx = (name) => header.indexOf(name);
-
-  const iDate    = idx("datum");
-  const iPlan    = idx("plan");
-  const iStation = idx("station");
-  const iWeight  = idx("vikt");
-  const iSets    = idx("set");
-  const iReps    = idx("reps");
-
-  if ([iDate, iPlan, iStation].some(i => i === -1)) {
-    alert("CSV-filen saknar nödvändiga kolumner.");
-    return;
-  }
-
-  const imported = [];
-
-  for (let i = 1; i < lines.length; i++) {
-    const cols = lines[i].split(";");
-
-    imported.push({
-      ts: Date.now() - i * 1000,   // behåller ordning
-      date: cols[iDate]?.trim() || "",
-      planName: cols[iPlan]?.trim() || "",
-      stationName: cols[iStation]?.trim() || "",
-      weight: cols[iWeight]?.trim() || "",
-      sets: cols[iSets]?.trim() || "",
-      reps: cols[iReps]?.trim() || "",
-      durationMin: null            // fanns inte i filen
-    });
-  }
-
-  state.history = [...imported, ...state.history];
-  save(LS.history, state.history);
-  renderHistory();
-
-  importCsvFile.value = "";
-  alert(`Importerade ${imported.length} historikrader.`);
 });
 
 
@@ -866,14 +1054,19 @@ function renderHistory(){
     return;
   }
 
+  const hasCardio = state.history.some(r => stationTypeOf(r) === "cardio");
   const rows = state.history.map(r => `
     <tr>
       <td>${r.date}</td>
       <td>${r.planName}</td>
-      <td>${r.stationName}</td>
+      <td>${escapeHtml(r.stationName)}</td>
       <td>${r.weight}</td>
       <td>${r.sets}</td>
       <td>${r.reps}</td>
+      ${hasCardio ? (stationTypeOf(r) === "cardio" ? `
+        <td>${escapeHtml(formatCardioDuration(r))}</td>
+        <td>${escapeHtml(r.distanceKm)} km</td>
+        <td class="history-comment">${escapeHtml(r.comment)}</td>` : '<td></td><td></td><td></td>') : ""}
     </tr>
   `).join("");
 
@@ -887,6 +1080,7 @@ function renderHistory(){
           <th>Vikt</th>
           <th>Set</th>
           <th>Reps</th>
+          ${hasCardio ? "<th>Tid (tt:mm:ss)</th><th>Distans</th><th>Kommentar</th>" : ""}
         </tr>
       </thead>
       <tbody>${rows}</tbody>

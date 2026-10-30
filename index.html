@@ -57,6 +57,14 @@
           </label>
 
           <label>
+            Typ
+            <select id="stationType">
+              <option value="strength">Styrka</option>
+              <option value="cardio">Kondition</option>
+            </select>
+          </label>
+
+          <label>
             Standardvikt (kg)
             <input id="stationDefaultWeight" type="number" inputmode="decimal" step="0.5" min="0" placeholder="Ex: 60" />
           </label>
@@ -143,7 +151,7 @@
           <button id="workoutResetBtn" class="ghost" type="button">Nollställ checklista</button>
         </div>
 
-        <p class="hint">När du avslutar sparas en rad per station med vikt/set/reps i historiken.</p>
+        <p class="hint">När du avslutar sparas en rad per station med vikt/set/reps eller tid, distans och kommentar i historiken.</p>
       </div>
     </section>
 
@@ -164,6 +172,16 @@
         <button id="exportAllBtn" class="ghost" type="button">
             Exportera ALLT (JSON)
         </button>
+        <p id="backupStatus" class="hint" role="status" aria-live="polite" aria-atomic="true"></p>
+        <div id="backupFallback" hidden>
+          <button id="downloadBackupBtn" class="ghost" type="button">Ladda ner backup (JSON)</button>
+          <details>
+            <summary>Visa backuptext för manuell kopiering</summary>
+            <p class="hint">Om delning eller nedladdning inte fungerar: markera och kopiera hela texten till en fil med ändelsen .json. Kontrollera att filen finns och innehåller all text.</p>
+            <label for="backupText">Komplett JSON-backup</label>
+            <textarea id="backupText" rows="8" readonly spellcheck="false"></textarea>
+          </details>
+        </div>
        
         <button id="rebuildFromHistoryBtn" class="danger" type="button">
             Återskapa stationer & planer från historik
